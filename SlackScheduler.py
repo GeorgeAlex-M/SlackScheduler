@@ -24,7 +24,7 @@
 #                                                                                                 #
 #                      Start Date : 01/04/23                                                      #
 #                                                                                                 #
-#                     Last Update : 01/08/23                                                      #
+#                     Last Update : 27/02/24                                                      #
 #                                                                                                 #
 #-------------------------------------------------------------------------------------------------#
 # Functions:                                                                                      #
@@ -90,9 +90,58 @@ class CommandHandler:
     #   01/04/23 - Function created by George Manea
     # ------------------------------------------------------------------------------------------
     def handle_command(self, command):
-        if command.startswith("/w "):
-            _, channel_id, message = command.split(" ", 2)
-            self.scheduler.send_to_channel(channel_id, message)
+        command = command.strip()
+        components = command.split(" ")
+        cmd = components.pop(0)
+
+        # Early checks for specific commands
+        if cmd == "help":
+            if components:
+                self.display_help_for_command(components[0])
+            else:
+                available_commands = ", ".join(self.scheduler.config["commands"].keys())
+                print(f"You have to select a command to display the help for. The current commands are: {available_commands}")
+            return
+
+        channel_id = None  # Initialize channel_id
+        message = []  # Use a list to collect message components for easier manipulation
+
+        # Loop through components to process switches and construct the message
+        i = 0  # Index for manual loop control
+        while i < len(components):
+            if components[i] == "-C" and (i + 1) < len(components):
+                channel_id = components[i + 1]  # Assign the next component as the channel_id
+                i += 2  # Skip the next component as it's already processed as channel_id
+            else:
+                message.append(components[i])
+                i += 1
+
+        message_text = " ".join(message).strip()  # Convert message list back to a string
+
+        if cmd == "/w":
+            if not channel_id:
+                channel_id = self.scheduler.config["commands"].get(cmd, {}).get("default_channel", None)
+            
+            if channel_id and message_text:
+                self.scheduler.send_to_channel(channel_id, message_text)
+            else:
+                print("You must specify a channel (-C channel_id) and a message to send.")
+        else:
+            print(f"Unrecognized or unsupported command: {cmd}. Use 'help' to see available commands.")
+
+    def display_help_for_command(self, cmd):
+        # Fetch the command configuration
+        cmd_config = self.scheduler.config["commands"].get(cmd)
+        
+        if cmd_config:
+            # Display the description and usage instructions
+            print(f"Help for '{cmd}':\n{cmd_config['description']}")
+            for switch, details in cmd_config.get("switches", {}).items():
+                print(f"  {switch}: {details['description']}")
+        else:
+            # Inform the user if the specified command does not exist
+            print(f"No help available for: {cmd}")
+
 
 class SlackScheduler:
     config = {
@@ -101,56 +150,71 @@ class SlackScheduler:
             "night_shift": True,
             "weekend_shift": True,
             "overtime_shift": True,
-            "meeting_reminders": True,
+            "meeting_reminders": False,
             "random_messages": False
+        },
+        "commands": {
+            "help": {
+                "description": "Provides usage information for a specified command. For example, 'help /w' displays help for the '/w' command.",
+            },
+            "/w": {
+                "description": "Send a message to a specified channel. Use -C to specify the channel ID.",
+                "default_channel": "C043NCYSH1V",  # Replace with your actual default channel ID
+                "switches": {
+                    "-C": {
+                        "description": "Specify the channel ID where the message will be sent. For example, '/w -C C043NCYSH1V Good morning!' sends 'Good morning!' to channel C043NCYSH1V."
+                    }
+                }
+            }
+            # Additional commands can be configured here with similar structure
         },
         "shift_message_config": {
             "day_shift": {
                 "days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
                 "messages": {
-                    "09:00 AM": "🌟 Good morning, team! A new day of challenges awaits us. Please write in the thread so that I know you're ready for work!",
-                    "11:15 AM": "🌼 Time for a short break [11:15-11:30]. Let's rejuvenate with grace.",
-                    "11:30 AM": "⏰ Back to our duties. With elegance, we continue our journey.",
-                    "01:00 PM": "🍵 Lunch break [13:00-14:00]. A moment of tranquility for us.",
-                    "02:00 PM": "🔮 Time to resume. Let's bring magic to our tasks.",
-                    "04:00 PM": "🌙 A brief respite to refocus our energies [16:00-16:15].",
-                    "04:15 PM": "✨ Back to work. Let's accomplish our goals with determination.",
-                    "05:00 PM": "📚 Day's end. Let's track our time."
+                    "09:00 AM": "Good morning, team. Let's commence our cybersecurity tasks for the day.",
+                    "11:15 AM": "Reminder: Short break from 11:15 to 11:30. Please take a moment to rest.",
+                    "11:30 AM": "Break time is over. Please continue with your scheduled cybersecurity activities.",
+                    "01:00 PM": "Lunch break from 13:00 to 14:00. Remember to step away from your workstations.",
+                    "02:00 PM": "Lunch break has ended. Resume your cybersecurity responsibilities.",
+                    "04:00 PM": "Scheduled break from 16:00 to 16:15. A brief pause for regrouping.",
+                    "04:15 PM": "Break time has concluded. Please proceed with your tasks.",
+                    "05:00 PM": "End of day's shift. Ensure your work is properly saved and secured."
                 }
             },
             "night_shift": {
                 "days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
                 "messages": {
-                    "06:30 PM": "🌙 Night shift begins. Let's face the night's challenges.",
-                    "08:00 PM": "🌌 Time for a short break [20:00-20:15]. Refresh and refocus.",
-                    "08:15 PM": "⏰ Back on duty. The night is still young.",
-                    "09:00 PM": "🌠 Mid-shift break [21:00-21:00]. Recharge for the second half.",
-                    "10:00 PM": "🦉 Continue with renewed energy.",
-                    "12:00 AM": "🌌 Quick break [12:00-12:15]. Stay sharp and alert.",
-                    "12:15 AM": "🔮 Resume with focus. Nearing the end of our shift.",
-                    "02:00 AM": "🌜 Night shift ends: Great job, team! It's time to track your time."
+                    "06:30 PM": "Night shift commences. Teams are to remain vigilant.",
+                    "08:00 PM": "Scheduled break from 20:00 to 20:15. Please take this time to relax.",
+                    "08:15 PM": "Break has ended. Resume night-time cybersecurity operations.",
+                    "09:00 PM": "Mid-shift break from 21:00 to 21:15. Use this time to recharge.",
+                    "10:00 PM": "Continue with night shift duties. Maintain focus and diligence.",
+                    "12:00 AM": "Short break from 00:00 to 00:15. Stay alert and prepared.",
+                    "12:15 AM": "Resume night shift activities until the end of the shift.",
+                    "02:00 AM": "Night shift concludes. Ensure all tasks are completed before logging off."
                 }
             },
             "weekend": {
                 "days": ["saturday", "sunday"],
                 "messages": {
-                    "11:00 AM": "🌻 Weekend shift starts! Let's make the most of our day.",
-                    "01:00 PM": "🍃 Time for a lunch break [13:00-14:00]. Enjoy your meal.",
-                    "02:00 PM": "🔥 Back to work. Let's keep up the pace.",
-                    "04:00 PM": "🌈 Short break [16:00-16:15]. A quick moment to relax.",
-                    "04:15 PM": "💪 Final hours. Stay strong and productive.",
-                    "05:00 PM": "🌇 Wrapping up the weekend shift. Don't forget to track your time."
+                    "11:00 AM": "Weekend operations start now. Dedication to tasks is essential.",
+                    "01:00 PM": "Lunch break from 13:00 to 14:00. Take this time for a proper meal.",
+                    "02:00 PM": "Resume weekend duties. Focus on completing all scheduled activities.",
+                    "04:00 PM": "Take a brief break from 16:00 to 16:15. Reflect on tasks completed.",
+                    "04:15 PM": "Continue with the remaining tasks for the weekend.",
+                    "05:00 PM": "Weekend operations conclude. Ensure all activities are logged appropriately."
                 }
             },
             "overtime": {
                 "days": ["saturday", "sunday"],
                 "messages": {
-                    "02:00 AM": "🌟 Overtime shift begins. Focus and determination are our guiding stars.",
-                    "03:30 AM": "🌙 Brief break [03:30-03:45]. A moment to recharge and refresh.",
-                    "03:45 AM": "⏰ Back to the grind. Let's make every moment count.",
-                    "05:00 AM": "🌠 A short, energizing break [05:00-05:15]. Keep the momentum going!",
-                    "05:15 AM": "🔥 Final stretch. Let's wrap up strong.",
-                    "06:00 AM": "🌅 Overtime shift ends: Well done, team! Time to rest and rejuvenate."
+                    "02:00 AM": "Overtime shift begins. Please concentrate on pending tasks.",
+                    "03:30 AM": "Short break from 03:30 to 03:45. Use this time to rest briefly.",
+                    "03:45 AM": "Resume overtime work. Prioritize tasks efficiently.",
+                    "05:00 AM": "Take a final break from 05:00 to 05:15. Prepare for the last stretch of work.",
+                    "05:15 AM": "Continue with the remaining overtime tasks.",
+                    "06:00 AM": "Overtime shift ends. Confirm completion of all tasks before logging off."
                 }
             }
         },
@@ -158,41 +222,41 @@ class SlackScheduler:
             # Day shift
             "09:30 AM": {
                 "days": ["monday"],
-                "message": "9:30 AM – 10:00 AM (Mon) - Andromeda - Sprint Planning\nMeeting ID: 325 692 613 318\nPasscode: PoPrmw\nLobby Bypass: People in org and guests"
+                "message": "9:30 AM – 10:00 AM (Mon) - Cybersecurity Sprint Planning\nMeeting ID: 325 692 613 318\nPasscode: Secure123\nLobby Bypass: People in org and guests"
             },
             "11:15 AM": {
                 "days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
-                "message": "11:15 AM – 11:30 AM (Every weekday (Mon-Fri)) - Andromeda - Developer and QA Daily Stand-Up\nMeeting ID: 393 725 551 975\nPasscode: kaDpYK\nLobby Bypass: People in org and guests"
+                "message": "11:15 AM – 11:30 AM (Every weekday (Mon-Fri)) - Threat Intelligence Briefing\nMeeting ID: 393 725 551 975\nPasscode: ThreatNet\nLobby Bypass: People in org and guests"
             },
             "11:40 AM": {
                 "days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
-                "message": "11:40 AM – 12:10 PM (Every weekday (Mon-Fri)) - Andromeda - USRO Morning Leadership Sync-Up\nMeeting ID: 329 721 470 133\nPasscode: e8ZPSF\nLobby Bypass: People in org and guests"
+                "message": "11:40 AM – 12:10 PM (Every weekday (Mon-Fri)) - Security Operations Sync-Up\nMeeting ID: 329 721 470 133\nPasscode: OpsSecure\nLobby Bypass: People in org and guests"
             },
             "01:00 PM": {
                 "days": ["tuesday"],
-                "message": "1:00 PM – 2:00 PM (Tue) - Andromeda - Developer and QA Tuesday Catch-Up\nMeeting ID: 389 305 352 850\nPasscode: D7dceU\nLobby Bypass: People in org and guests"
+                "message": "1:00 PM – 2:00 PM (Tue) - Vulnerability Assessment Review\nMeeting ID: 389 305 352 850\nPasscode: VulnScan\nLobby Bypass: People in org and guests"
             },
             "01:30 PM": {
                 "days": ["thursday"],
-                "message": "1:30 PM – 2:30 PM (Thu) - Andromeda - Design and QA Catch-Up\nMeeting ID: 371 990 411 935\nPasscode: 4D2sBS\nLobby Bypass: People in org and guests"
+                "message": "1:30 PM – 2:30 PM (Thu) - Incident Response Team Meeting\nMeeting ID: 371 990 411 935\nPasscode: IRReady\nLobby Bypass: People in org and guests"
             },
             "02:30 PM": {
                 "days": ["friday"],
-                "message": "2:30 PM – 3:00 PM (Fri) - Andromeda - Weekly Test Plan Strategy Meeting\nMeeting ID: 367 910 333 672\nPasscode: rR4LpA\nLobby Bypass: People in org and guests"
+                "message": "2:30 PM – 3:00 PM (Fri) - Weekly Cybersecurity Strategy Session\nMeeting ID: 367 910 333 672\nPasscode: StrategySec\nLobby Bypass: People in org and guests"
             },
             "04:00 PM": {
                 "days": ["friday"],
-                "message": "4:00 PM – 4:30 PM (Fri) - Andromeda - Sprint Review\nMeeting ID: 318 600 963 564\nPasscode: dwDXsv\nLobby Bypass: People in org and guests"
+                "message": "4:00 PM – 4:30 PM (Fri) - Security Tooling Sprint Review\nMeeting ID: 318 600 963 564\nPasscode: ToolsRev\nLobby Bypass: People in org and guests"
             },
             "04:30 PM": {
                 "days": ["friday"],
-                "message": "4:30 PM – 5:00 PM (Fri) - Andromeda - Retrospective Meeting and Live Service\nMeeting ID: 389 805 633 508\nPasscode: EeQtWz\nLobby Bypass: People in org and guests"
+                "message": "4:30 PM – 5:00 PM (Fri) - Cybersecurity Retrospective and Look Ahead\nMeeting ID: 389 805 633 508\nPasscode: CyberLook\nLobby Bypass: People in org and guests"
             }
             # Night shift
             
         },
         "random_messages": [
-            "🌸 Every task is an opportunity to showcase our strength and grace.",
+            "🛡️ Every scan, every line of code, fortifies our digital realm.",
             # ... [other random messages]
         ]
     }
@@ -361,7 +425,13 @@ class SlackScheduler:
     # History:
     #   01/04/23 - Function created by George Manea
     # ------------------------------------------------------------------------------------------
+    
     def schedule_shift_reminders(self, shift_type, channel_id):
+        # Check if the shift type is enabled in the configuration
+        if not self.config["enable_features"].get(shift_type, False):
+            self.log_message("Scheduling", f"{shift_type} is disabled in the config. Skipping scheduling.")
+            return
+
         # Retrieves shift configuration based on the specified shift type (e.g., 'day_shift')
         shift_config = self.config["shift_message_config"].get(shift_type, {})
 
@@ -438,6 +508,11 @@ class SlackScheduler:
     #   01/04/23 - Function created by George Manea
     # ------------------------------------------------------------------------------------------
     def schedule_meeting_reminders(self, channel_id):
+        # Check if meeting reminders are enabled in the configuration
+        if not self.config["enable_features"]["meeting_reminders"]:
+            self.log_message("Scheduling", "Meeting reminders are disabled in the config. Skipping scheduling.")
+            return
+
         # Set to track unique combinations of day and time to prevent duplicate scheduling
         scheduled_times = set()
 
@@ -521,16 +596,16 @@ class SlackScheduler:
 
 # Example Implementation
 # Creating an instance of SlackScheduler with an API key
-slack_scheduler = SlackScheduler("xoxb-your-slack-token")
+slack_scheduler = SlackScheduler("Your API Key")
 
 # Scheduling shift reminders for different types of shifts in a specific Slack channel
-slack_scheduler.schedule_shift_reminders("day_shift", "CHANNEL_ID")
-slack_scheduler.schedule_shift_reminders("night_shift", "CHANNEL_ID")
-slack_scheduler.schedule_shift_reminders("weekend", "CHANNEL_ID")
-slack_scheduler.schedule_shift_reminders("overtime", "CHANNEL_ID")
+slack_scheduler.schedule_shift_reminders("day_shift", "Your Channel ID")
+slack_scheduler.schedule_shift_reminders("night_shift", "Your Channel ID")
+slack_scheduler.schedule_shift_reminders("weekend_shift", "Your Channel ID")
+slack_scheduler.schedule_shift_reminders("overtime_shift", "Your Channel ID")
 
 # Scheduling meeting reminders in the specified channel
-slack_scheduler.schedule_meeting_reminders("CHANNEL_ID")
+slack_scheduler.schedule_meeting_reminders("Your Channel ID")
 
 # Starting the Slack scheduler to listen for commands and execute scheduled tasks
 slack_scheduler.run()
